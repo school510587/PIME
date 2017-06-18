@@ -27,19 +27,8 @@ from .brl_tables import brl_ascii_dic, brl_buf_state
 
 class BrailleChewingTextService(ChewingTextService):
 
-    # 鍵盤按鍵轉成點字 1 - 8 點
-    # A-Z 的 Windows virtual key codes = 大寫的 ASCII code
-    braille_keys = [
-        ord(' '),  # Space
-        ord('F'),  # 1
-        ord('D'),  # 2
-        ord('S'),  # 3
-        ord('J'),  # 4
-        ord('K'),  # 5
-        ord('L'),  # 6
-        ord('A'),  # 7
-        ord(';'),  # 8
-    ]
+    # 9 個字元代表點字鍵盤的空白跟 1-8 點在標準鍵盤的位置
+    braille_keys = " FDSJKLA;"
 
     # 注音符號對實體鍵盤英數按鍵
     bopomofo_to_keys = {
@@ -245,10 +234,11 @@ class BrailleChewingTextService(ChewingTextService):
                 return True
         elif self.needs_braille_handling(keyEvent):
             # 點字模式，檢查到是點字鍵被按下就記錄起來，忽略其餘按鍵
-            if keyEvent.keyCode in self.braille_keys:
-                i = self.braille_keys.index(keyEvent.keyCode)
-                self.dots_cumulative_state |= 1 << i
-                self.dots_pressed_state |= 1 << i
+            if keyEvent.isPrintableChar():
+                i = self.braille_keys.find(chr(keyEvent.charCode).upper())
+                if i >= 0:
+                    self.dots_cumulative_state |= 1 << i
+                    self.dots_pressed_state |= 1 << i
             return True
         return super().onKeyDown(keyEvent)
 
@@ -259,8 +249,10 @@ class BrailleChewingTextService(ChewingTextService):
 
     def onKeyUp(self, keyEvent):
         # 發現點字鍵被釋放，更新追蹤狀態
-        if keyEvent.keyCode in self.braille_keys:
-            self.dots_pressed_state &= ~(1 << self.braille_keys.index(keyEvent.keyCode))
+        if keyEvent.isPrintableChar():
+            i = self.braille_keys.find(chr(keyEvent.charCode).upper())
+            if i >= 0:
+                self.dots_pressed_state &= ~(1 << i)
             # 點字鍵已全數釋放且有尚待處理的點字
             if not self.dots_pressed_state and self.dots_cumulative_state:
                 self.handle_braille_keys(keyEvent)
