@@ -16,6 +16,7 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+from ctypes import *
 import winsound  # for PlaySound
 import os
 
@@ -30,15 +31,15 @@ class BrailleChewingTextService(ChewingTextService):
     # 鍵盤按鍵轉成點字 1 - 8 點
     # A-Z 的 Windows virtual key codes = 大寫的 ASCII code
     braille_keys = [
-        ord(' '),  # Space
-        ord('F'),  # 1
-        ord('D'),  # 2
-        ord('S'),  # 3
-        ord('J'),  # 4
-        ord('K'),  # 5
-        ord('L'),  # 6
-        ord('A'),  # 7
-        ord(';'),  # 8
+        VK_SPACE, # Space
+        ord('F'), # 1
+        ord('D'), # 2
+        ord('S'), # 3
+        ord('J'), # 4
+        ord('K'), # 5
+        ord('L'), # 6
+        ord('A'), # 7
+        c_short(windll.user32.VkKeyScanExW(c_ushort(ord(';')), c_void_p(0x04040404))).value & 0x00FF, # 8
     ]
 
     # 注音符號對實體鍵盤英數按鍵
