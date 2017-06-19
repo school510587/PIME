@@ -187,8 +187,8 @@ class BrailleChewingTextService(ChewingTextService):
 
     def __init__(self, client):
         super().__init__(client)
-        self.braille_keys_pressed = False
-        self.dots_pressed_states = [False] * 9
+        self.dots_cumulative_state = 0
+        self.dots_pressed_state = 0
         self.state = brl_buf_state()
 
     def applyConfig(self):
@@ -204,12 +204,11 @@ class BrailleChewingTextService(ChewingTextService):
         # TODO: 強制關閉新酷音某些和點字輸入相衝的功能
 
     def reset_braille_mode(self, clear_pending=True):
-        # 清除點字 buffer，準備打下一個字
-        for i in range(len(self.dots_pressed_states)):
-            self.dots_pressed_states[i] = False
+        # 清除點字按鍵的追蹤狀態，準備打下一個字
+        self.dots_cumulative_state = 0
+        self.dots_pressed_state = 0
         if clear_pending:
             self.state.reset()
-        self.braille_keys_pressed = False
 
     def has_modifiers(self, keyEvent):
         # 檢查是否 Ctrl, Shift, Alt 的任一個有被按下
@@ -245,27 +244,25 @@ class BrailleChewingTextService(ChewingTextService):
             if self.handle_braille_keys(keyEvent):
                 return True
         elif self.needs_braille_handling(keyEvent):
-            # 點字模式，檢查 8 個點字鍵是否被按下，忽略其餘按鍵
-            for i, key in enumerate(self.braille_keys):
-                if keyEvent.isKeyDown(key):
-                    self.dots_pressed_states[i] = 1
-                    self.braille_keys_pressed = True
+            # 點字模式，檢查到是點字鍵被按下就記錄起來，忽略其餘按鍵
+            if keyEvent.keyCode in self.braille_keys:
+                i = self.braille_keys.index(keyEvent.keyCode)
+                self.dots_cumulative_state |= 1 << i
+                self.dots_pressed_state |= 1 << i
             return True
         return super().onKeyDown(keyEvent)
 
     def filterKeyUp(self, keyEvent):
-        if self.braille_keys_pressed:
+        if self.dots_pressed_state:
             return True
         return super().filterKeyUp(keyEvent)
 
     def onKeyUp(self, keyEvent):
-        if self.braille_keys_pressed:
-            all_released = True
-            # 檢查是否全部點字鍵都已放開
-            for key in self.braille_keys:
-                if keyEvent.isKeyDown(key):
-                    all_released = False
-            if all_released:
+        # 發現點字鍵被釋放，更新追蹤狀態
+        if keyEvent.keyCode in self.braille_keys:
+            self.dots_pressed_state &= ~(1 << self.braille_keys.index(keyEvent.keyCode))
+            # 點字鍵已全數釋放且有尚待處理的點字
+            if not self.dots_pressed_state and self.dots_cumulative_state:
                 self.handle_braille_keys(keyEvent)
             return True
         return super().onKeyUp(keyEvent)
@@ -306,8 +303,8 @@ class BrailleChewingTextService(ChewingTextService):
         if keyEvent.keyCode == VK_BACK:
             current_braille = "\b"
         else:
-            # 將點字鍵盤狀態轉成用數字表示，例如 [False, True, True, True, True, False, True, False] 轉成 "23457"
-            current_braille = "".join([str(i) for i, pressed in enumerate(self.dots_pressed_states) if pressed])
+            # 將點字鍵盤狀態轉成用數字表示，例如位元 0-8 為 (8) 010111100 (0) 就轉成 "23457"
+            current_braille = "".join([str(i) for i in range(len(self.braille_keys)) if self.dots_cumulative_state & (1 << i)])
         bopomofo_seq = ""
         # 點字鍵入轉換成 ASCII 字元、熱鍵或者注音
         if current_braille == "\b":
