@@ -297,7 +297,7 @@ class BrailleChewingTextService(ChewingTextService):
         else:
             # 將點字鍵盤狀態轉成用數字表示，例如位元 0-8 為 (8) 010111100 (0) 就轉成 "23457"
             current_braille = "".join([str(i) for i in range(len(self.braille_keys)) if self.dots_cumulative_state & (1 << i)])
-        bopomofo_seq = ""
+        bopomofo_seq = None
         # 點字鍵入轉換成 ASCII 字元、熱鍵或者注音
         if current_braille == "\b":
             key = self.state.append_brl("\b")
@@ -322,28 +322,30 @@ class BrailleChewingTextService(ChewingTextService):
             # 熱鍵 456+space 與 Shift 一樣能切換中打、英打模式
             self.toggleLanguageMode()
         elif current_braille.startswith("0") and len(current_braille) > 1:
-            # 未定義的熱鍵，發出警告聲，空白 "0" 不屬此類
-            winsound.MessageBeep()
+            # 未定義的熱鍵，直接離開這個 if-else, 因為 bopomofo_seq 是 None 而發出警告聲（空白 "0" 不屬此類）
+            pass
         elif self.langMode == ENGLISH_MODE:
-            bopomofo_seq = brl_ascii_dic.get(current_braille, "")
-            if keyEvent.isKeyToggled(VK_CAPITAL):  # capslock
+            bopomofo_seq = brl_ascii_dic.get(current_braille)
+            if bopomofo_seq and keyEvent.isKeyToggled(VK_CAPITAL):  # capslock
                 bopomofo_seq = bopomofo_seq.upper()  # convert to upper case
         else:
             # 如果正在選字，允許使用點字數字
             if self.get_chewing_cand_totalPage():
                 bopomofo_seq = brl_ascii_dic.get(current_braille, "")
-                if bopomofo_seq not in "0123456789":
-                    winsound.MessageBeep()
+                if bopomofo_seq and bopomofo_seq not in "0123456789":
+                    bopomofo_seq = None
             # 否則，將點字送給內部進行組字
             else:
                 key = self.state.append_brl(current_braille)
                 if key:
                     bopomofo_seq = "\b" * key["VK_BACK"] + key["bopomofo"]
-                else:
-                    winsound.MessageBeep()
 
-        print(current_braille.replace("\b", r"\b"), "=>", bopomofo_seq.replace("\b", r"\b"))
-        if bopomofo_seq:
+        print(current_braille.replace("\b", r"\b"), "=>", bopomofo_seq.replace("\b", r"\b") if bopomofo_seq else bopomofo_seq)
+        # bopomofo_seq 維持 None 表示輸入被拒，發出警告聲
+        if bopomofo_seq is None:
+            winsound.MessageBeep()
+        # bopomofo_seq 是一個非空字串，才轉送輸入給新酷音
+        elif bopomofo_seq:
             bopomofo_seq = "".join(self.bopomofo_to_keys.get(c, c) for c in bopomofo_seq)
             # 把注音送給新酷音
             self.send_keys_to_chewing(bopomofo_seq, keyEvent)
