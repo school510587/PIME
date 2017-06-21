@@ -243,18 +243,20 @@ class BrailleChewingTextService(ChewingTextService):
         return super().onKeyDown(keyEvent)
 
     def filterKeyUp(self, keyEvent):
-        if self.dots_pressed_state:
+        if self.needs_braille_handling(keyEvent):
             return True
         return super().filterKeyUp(keyEvent)
 
     def onKeyUp(self, keyEvent):
-        # 發現點字鍵被釋放，更新追蹤狀態
-        if keyEvent.isPrintableChar():
-            i = self.braille_keys.find(chr(keyEvent.charCode).upper())
-            if i >= 0:
-                self.dots_pressed_state &= ~(1 << i)
-            # 點字鍵已全數釋放且有尚待處理的點字
-            if not self.dots_pressed_state and self.dots_cumulative_state:
+        if self.needs_braille_handling(keyEvent):
+            # 發現點字鍵被釋放，更新追蹤狀態
+            if keyEvent.isPrintableChar():
+                i = self.braille_keys.find(chr(keyEvent.charCode).upper())
+                if i >= 0:
+                    self.dots_pressed_state &= ~(1 << i)
+            # 點字鍵已全數釋放，讀取目前記錄的點字輸入並處理
+            # 如果在點字組字期間按下 Delete 或方向鍵等也會執行到此
+            if not self.dots_pressed_state and keyEvent.keyCode != VK_BACK:
                 self.handle_braille_keys(keyEvent)
             return True
         return super().onKeyUp(keyEvent)
@@ -292,14 +294,18 @@ class BrailleChewingTextService(ChewingTextService):
 
     # 將點字 8 點轉換成注音按鍵，送給新酷音處理
     def handle_braille_keys(self, keyEvent):
+        current_braille = None
         if keyEvent.keyCode == VK_BACK:
             current_braille = "\b"
-        else:
+        elif self.dots_cumulative_state:
             # 將點字鍵盤狀態轉成用數字表示，例如位元 0-8 為 (8) 010111100 (0) 就轉成 "23457"
             current_braille = "".join([str(i) for i in range(len(self.braille_keys)) if self.dots_cumulative_state & (1 << i)])
         bopomofo_seq = None
         # 點字鍵入轉換成 ASCII 字元、熱鍵或者注音
-        if current_braille == "\b":
+        if current_braille is None:
+            # current_braille 是 None 表示（點字組字過程中）按了無效的鍵
+            pass
+        elif current_braille == "\b":
             key = self.state.append_brl("\b")
             if key:
                 bopomofo_seq = "\b" * key["VK_BACK"] + key["bopomofo"]
@@ -318,9 +324,11 @@ class BrailleChewingTextService(ChewingTextService):
                 self.setCompositionString(compStr)
                 self.setCompositionCursor(self.chewingContext.cursor_Current())
             self.state.reset()
+            bopomofo_seq = ""
         elif current_braille == "0456":
             # 熱鍵 456+space 與 Shift 一樣能切換中打、英打模式
             self.toggleLanguageMode()
+            bopomofo_seq = ""
         elif current_braille.startswith("0") and len(current_braille) > 1:
             # 未定義的熱鍵，直接離開這個 if-else, 因為 bopomofo_seq 是 None 而發出警告聲（空白 "0" 不屬此類）
             pass
@@ -340,7 +348,10 @@ class BrailleChewingTextService(ChewingTextService):
                 if key:
                     bopomofo_seq = "\b" * key["VK_BACK"] + key["bopomofo"]
 
-        print(current_braille.replace("\b", r"\b"), "=>", bopomofo_seq.replace("\b", r"\b") if bopomofo_seq else bopomofo_seq)
+        if current_braille is None:
+            print("Invalid input during braille composition. keyCode:", keyEvent.keyCode)
+        else:
+            print(current_braille.replace("\b", r"\b"), "=>", bopomofo_seq.replace("\b", r"\b") if bopomofo_seq else bopomofo_seq)
         # bopomofo_seq 維持 None 表示輸入被拒，發出警告聲
         if bopomofo_seq is None:
             winsound.MessageBeep()
