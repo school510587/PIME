@@ -190,6 +190,7 @@ class BrailleChewingTextService(ChewingTextService):
         super().__init__(client)
         self.dots_cumulative_state = 0
         self.dots_pressed_state = 0
+        self.bpmf_cumulative_str = ""
         self.state = brl_buf_state()
 
     def applyConfig(self):
@@ -209,6 +210,7 @@ class BrailleChewingTextService(ChewingTextService):
         self.dots_cumulative_state = 0
         self.dots_pressed_state = 0
         if clear_pending:
+            self.bpmf_cumulative_str = ""
             self.state.reset()
 
     def has_modifiers(self, keyEvent):
@@ -251,6 +253,11 @@ class BrailleChewingTextService(ChewingTextService):
                 self.dots_cumulative_state |= 1 << i
                 self.dots_pressed_state |= 1 << i
             return True
+        elif keyEvent.keyCode == VK_ESCAPE:
+            # 注音打到一半，模擬新酷音清除注音緩衝區
+            if self.bpmf_cumulative_str:
+                self.bpmf_cumulative_str = ""
+                return True
         return super().onKeyDown(keyEvent)
 
     def filterKeyUp(self, keyEvent):
@@ -323,15 +330,7 @@ class BrailleChewingTextService(ChewingTextService):
         elif current_braille == "0245":
             # 熱鍵 245+space 能夠在點字狀態失去控制時將它重設，不遺失已經存在組字區的中文
             # 正在輸入注音，就把注音去掉
-            if self.chewingContext and self.chewingContext.bopomofo_Check():
-                # 清除打到一半的注音狀態
-                self.chewingContext.clean_bopomofo_buf()
-                compStr = ""
-                if self.chewingContext.buffer_Check():
-                    compStr = self.chewingContext.buffer_String().decode("UTF-8")
-                # 恢復原本組字區內蟲跟游標位置
-                self.setCompositionString(compStr)
-                self.setCompositionCursor(self.chewingContext.cursor_Current())
+            self.bpmf_cumulative_str = ""
             self.state.reset()
             bopomofo_seq = ""
         elif current_braille == "0456":
@@ -367,8 +366,20 @@ class BrailleChewingTextService(ChewingTextService):
         # bopomofo_seq 是一個非空字串，才轉送輸入給新酷音
         elif bopomofo_seq:
             bopomofo_seq = "".join(self.bopomofo_to_keys.get(c, c) for c in bopomofo_seq)
-            # 把注音送給新酷音
-            self.send_keys_to_chewing(bopomofo_seq, keyEvent)
+            # 將這次按下點字該送給新酷音的按鍵先暫存在 bpmf_cumulative_str
+            for c in bopomofo_seq:
+                if c == "\b":
+                    self.bpmf_cumulative_str = self.bpmf_cumulative_str[:-1]
+                else:
+                    self.bpmf_cumulative_str += c
+            # 遇到輸入符號，直接丟棄之前要打注音的鍵入序列
+            if bopomofo_seq.startswith("`"):
+                self.bpmf_cumulative_str = bopomofo_seq
+            # 內部點字累積狀態被重設，表示鍵入序列必須轉送給新酷音了
+            if not self.state.brl_check():
+                # 把注音送給新酷音
+                self.send_keys_to_chewing(self.bpmf_cumulative_str, keyEvent)
+                self.bpmf_cumulative_str = ""
 
         # 清除點字 buffer，準備打下一個字
         self.reset_braille_mode(False)
@@ -383,6 +394,7 @@ class BrailleChewingTextService(ChewingTextService):
             snd_file = os.path.join(self.sounds_dir, "chi.wav" if mode == CHINESE_MODE else "eng.wav")
             winsound.PlaySound(snd_file, winsound.SND_FILENAME|winsound.SND_ASYNC|winsound.SND_NODEFAULT)
             if mode == ENGLISH_MODE:
+                self.bpmf_cumulative_str = ""
                 self.state.reset()
 
     # 切換全形/半形
