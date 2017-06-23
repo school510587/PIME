@@ -212,7 +212,7 @@ class BrailleChewingTextService(ChewingTextService):
         if not has_modifiers and keyEvent.isPrintableChar():
             return True
         # 其他按鍵會打斷正在記錄的點字輸入
-        if has_modifiers or keyEvent.keyCode == VK_ESCAPE:
+        if has_modifiers:
             # 若按壓修飾鍵，會清除所有內部點字狀態
             self.reset_braille_mode()
         else:
@@ -234,6 +234,13 @@ class BrailleChewingTextService(ChewingTextService):
             # 將倒退鍵經過內部狀態處理，取得鍵入序列轉送新酷音
             if self.handle_braille_keys(keyEvent):
                 return True
+        elif keyEvent.keyCode == VK_ESCAPE:
+            # 點字打到一半，清除內部狀態
+            if self.state.brl_check():
+                self.state.reset()
+                self.bpmf_cumulative_str = ""
+                self.update_composition_display()
+                return True
         elif self.needs_braille_handling(keyEvent):
             # 點字模式，檢查到是點字鍵被按下就記錄起來，忽略其餘按鍵
             if keyEvent.isPrintableChar():
@@ -242,11 +249,6 @@ class BrailleChewingTextService(ChewingTextService):
                     self.dots_cumulative_state |= 1 << i
                     self.dots_pressed_state |= 1 << i
             return True
-        elif keyEvent.keyCode == VK_ESCAPE:
-            # 注音打到一半，模擬新酷音清除注音緩衝區
-            if self.bpmf_cumulative_str:
-                self.bpmf_cumulative_str = ""
-                return True
         return super().onKeyDown(keyEvent)
 
     def filterKeyUp(self, keyEvent):
@@ -372,6 +374,8 @@ class BrailleChewingTextService(ChewingTextService):
                 self.send_keys_to_chewing(self.bpmf_cumulative_str, keyEvent)
                 self.bpmf_cumulative_str = ""
 
+        self.update_composition_display()
+
         # 清除點字 buffer，準備打下一個字
         self.reset_braille_mode(False)
         return True # braille input processed
@@ -396,3 +400,15 @@ class BrailleChewingTextService(ChewingTextService):
             mode = self.chewingContext.get_ShapeMode()
             snd_file = os.path.join(self.sounds_dir, "full.wav" if mode == FULLSHAPE_MODE else "half.wav")
             winsound.PlaySound(snd_file, winsound.SND_FILENAME|winsound.SND_ASYNC|winsound.SND_NODEFAULT)
+
+    # 用 braille unicode 將目前狀態顯示出來
+    def update_composition_display(self):
+        if self.chewingContext:
+            compStr = ""
+            if self.chewingContext.buffer_Check():
+                compStr = self.chewingContext.buffer_String().decode("UTF-8")
+            pos = self.chewingContext.cursor_Current()
+            ucbrl_str = self.state.ucbrl_str()
+            compStr = compStr[:pos] + ucbrl_str + compStr[pos:]
+            self.setCompositionCursor(self.chewingContext.cursor_Current() + len(ucbrl_str))
+            self.setCompositionString(compStr)
