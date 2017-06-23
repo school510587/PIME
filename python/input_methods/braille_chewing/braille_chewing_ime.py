@@ -339,6 +339,12 @@ class BrailleChewingTextService(ChewingTextService):
             # 熱鍵 456+space 與 Shift 一樣能切換中打、英打模式
             self.toggleLanguageMode()
             bopomofo_seq = ""
+        elif current_braille == "01":
+            # 熱鍵 1+space 用來產生肉眼可讀的輸入狀態提示訊息
+            message = self.state.hint_msg()
+            if message:
+                self.showMessage(message, 8)
+            bopomofo_seq = ""
         elif current_braille.startswith("0") and len(current_braille) > 1:
             # 未定義的熱鍵，直接離開這個 if-else, 因為 bopomofo_seq 是 None 而發出警告聲（空白 "0" 不屬此類）
             pass

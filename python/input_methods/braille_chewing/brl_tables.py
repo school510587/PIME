@@ -437,6 +437,18 @@ class brl_buf_state:
     def brl_check(self):
         return bool(self._brl_buf)
 
+    def hint_msg(self):
+        bpmf_hint = ""
+        if self._stack[-1]:
+            if len(self._brl_buf) == 1:
+                t = self._stack[0]["class_info"][self._brl_buf[0]]
+                bpmf_hint = "/".join(sorted(set(r[-1] if type(r) is tuple else r for r in t)))
+            elif len(self._brl_buf) > 1:
+                bpmf_hint = "".join(self._bop_buf)
+            if bpmf_hint:
+                bpmf_hint = " (" + bpmf_hint + ")"
+        return "-".join(self._brl_buf) + bpmf_hint
+
     def reset(self):
         self._brl_buf = []
         self._bop_buf = []
