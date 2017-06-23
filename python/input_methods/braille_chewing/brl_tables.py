@@ -443,6 +443,16 @@ class brl_buf_state:
         # 初始狀態，下一個可接受聲母或介、韻母輸入
         self._stack = [(CONSONANT_DICT, RHYME_DICT)]
 
+    def ucbrl_str(self):
+        ucbrl = ""
+        for cell in self._brl_buf:
+            u = 0
+            for dot in cell:
+                u |= 1 << int(dot) # 位移量為 1-8
+            u = 0x2800 | (u >> 1)
+            ucbrl += chr(u)
+        return ucbrl
+
 # Testcases here.
 if __name__ == "__main__":
     key_seq = "356-356".split("-")
