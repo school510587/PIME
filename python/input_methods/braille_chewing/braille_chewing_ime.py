@@ -179,7 +179,7 @@ class BrailleChewingTextService(ChewingTextService):
         self.dots_cumulative_state = 0
         self.dots_pressed_state = 0
         self.bpmf_cumulative_str = ""
-        self.state = brl_buf_state()
+        self.state = brl_buf_state(False)
 
     def applyConfig(self):
         # 攔截 ChewingTextService 的 applyConfig，以便強制關閉某些設定選項
@@ -336,6 +336,10 @@ class BrailleChewingTextService(ChewingTextService):
             if message:
                 self.showMessage(message, 8)
             bopomofo_seq = ""
+        elif current_braille == "0145":
+            # 熱鍵 145+space 用來切換未組成字的狀態顯示方式
+            self.state.display_ucbrl = not self.state.display_ucbrl
+            bopomofo_seq = ""
         elif current_braille.startswith("0") and len(current_braille) > 1:
             # 未定義的熱鍵，直接離開這個 if-else, 因為 bopomofo_seq 是 None 而發出警告聲（空白 "0" 不屬此類）
             pass
@@ -407,14 +411,14 @@ class BrailleChewingTextService(ChewingTextService):
             snd_file = os.path.join(self.sounds_dir, "full.wav" if mode == FULLSHAPE_MODE else "half.wav")
             winsound.PlaySound(snd_file, winsound.SND_FILENAME|winsound.SND_ASYNC|winsound.SND_NODEFAULT)
 
-    # 用 braille unicode 將目前狀態顯示出來
+    # 更新組字區顯示正在組字的狀態
     def update_composition_display(self):
         if self.chewingContext:
             compStr = ""
             if self.chewingContext.buffer_Check():
                 compStr = self.chewingContext.buffer_String().decode("UTF-8")
             pos = self.chewingContext.cursor_Current()
-            ucbrl_str = self.state.ucbrl_str()
-            compStr = compStr[:pos] + ucbrl_str + compStr[pos:]
-            self.setCompositionCursor(self.chewingContext.cursor_Current() + len(ucbrl_str))
+            brl_buf_str = self.state.display_str()
+            compStr = compStr[:pos] + brl_buf_str + compStr[pos:]
+            self.setCompositionCursor(self.chewingContext.cursor_Current() + len(brl_buf_str))
             self.setCompositionString(compStr)
