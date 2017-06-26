@@ -21,7 +21,7 @@ import os
 
 from keycodes import * # for VK_XXX constants
 from textService import *
-from ..chewing.chewing_ime import ChewingTextService, ENGLISH_MODE, CHINESE_MODE, FULLSHAPE_MODE
+from ..chewing.chewing_ime import *
 from .brl_tables import brl_ascii_dic, brl_buf_state
 
 
@@ -339,6 +339,30 @@ class BrailleChewingTextService(ChewingTextService):
         elif current_braille == "0145":
             # 熱鍵 145+space 用來切換未組成字的狀態顯示方式
             self.state.display_ucbrl = not self.state.display_ucbrl
+            bopomofo_seq = ""
+        elif current_braille == "024567":
+            # 熱鍵 24567+space 用來打開新酷音官方網站
+            super().onCommand(ID_WEBSITE, COMMAND_LEFT_CLICK)
+            bopomofo_seq = ""
+        elif current_braille == "012457":
+            # 熱鍵 12457+space 用來打開新酷音線上討論區
+            super().onCommand(ID_GROUP, COMMAND_LEFT_CLICK)
+            bopomofo_seq = ""
+        elif current_braille == "0127":
+            # 熱鍵 127+space 用來打開「軟體本身的建議及錯誤回報」
+            super().onCommand(ID_BUGREPORT, COMMAND_LEFT_CLICK)
+            bopomofo_seq = ""
+        elif current_braille == "012347":
+            # 熱鍵 12347+space 用來打開「注音及選字選詞錯誤回報」
+            super().onCommand(ID_DICT_BUGREPORT, COMMAND_LEFT_CLICK)
+            bopomofo_seq = ""
+        elif current_braille == "0157":
+            # 熱鍵 157+space 用來打開「編輯使用者詞庫」
+            super().onCommand(ID_USER_PHRASE_EDITOR, COMMAND_LEFT_CLICK)
+            bopomofo_seq = ""
+        elif current_braille == "02347":
+            # 熱鍵 2347+space 用來點擊「輸出簡體中文」
+            super().onCommand(ID_OUTPUT_SIMP_CHINESE, COMMAND_LEFT_CLICK)
             bopomofo_seq = ""
         elif current_braille.startswith("0") and len(current_braille) > 1:
             # 未定義的熱鍵，直接離開這個 if-else, 因為 bopomofo_seq 是 None 而發出警告聲（空白 "0" 不屬此類）
