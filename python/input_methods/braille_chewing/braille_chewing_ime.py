@@ -193,6 +193,21 @@ class BrailleChewingTextService(ChewingTextService):
 
         # TODO: 強制關閉新酷音某些和點字輸入相衝的功能
 
+    # 使用者離開輸入法
+    def onDeactivate(self):
+        super().onDeactivate()
+        # 丟棄輸入法狀態
+        self.reset_braille_mode()
+
+    # 當中文編輯結束時會被呼叫。若中文編輯不是正常結束，而是因為使用者
+    # 切換到其他應用程式或其他原因，導致我們的輸入法被強制關閉，此時
+    # forced 參數會是 True，在這種狀況下，要清除一些 buffer
+    def onCompositionTerminated(self, forced):
+        super().onCompositionTerminated(forced)
+        if forced:
+            # 中文組字到一半被系統強制關閉，清除編輯區內容
+            self.reset_braille_mode()
+
     def reset_braille_mode(self, clear_pending=True):
         # 清除點字按鍵的追蹤狀態，準備打下一個字
         self.dots_cumulative_state = 0
