@@ -439,7 +439,7 @@ class brl_buf_state:
         return bool(self._brl_buf)
 
     def display_str(self):
-        return self.ucbrl_str() if self.display_ucbrl else "".join(self._bop_buf)
+        return self.ucbrl_str() if self.display_ucbrl or not self._stack[-1] else "".join(self._bop_buf)
 
     def hint_msg(self):
         bpmf_hint = ""
