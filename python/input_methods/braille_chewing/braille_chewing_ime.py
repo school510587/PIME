@@ -178,6 +178,8 @@ class BrailleChewingTextService(ChewingTextService):
         super().__init__(client)
         self.dots_cumulative_state = 0
         self.dots_pressed_state = 0
+        self.keys_forwarded = set()
+        self.keys_handled = set()
         self.bpmf_cumulative_str = ""
         self.state = brl_buf_state(False)
 
@@ -197,6 +199,8 @@ class BrailleChewingTextService(ChewingTextService):
     def onDeactivate(self):
         super().onDeactivate()
         # 丟棄輸入法狀態
+        self.keys_forwarded.clear()
+        self.keys_handled.clear()
         self.reset_braille_mode()
 
     # 當中文編輯結束時會被呼叫。若中文編輯不是正常結束，而是因為使用者
@@ -206,6 +210,8 @@ class BrailleChewingTextService(ChewingTextService):
         super().onCompositionTerminated(forced)
         if forced:
             # 中文組字到一半被系統強制關閉，清除編輯區內容
+            self.keys_forwarded.clear()
+            self.keys_handled.clear()
             self.reset_braille_mode()
 
     def reset_braille_mode(self, clear_pending=True):
@@ -243,6 +249,8 @@ class BrailleChewingTextService(ChewingTextService):
         return super().filterKeyDown(keyEvent)
 
     def onKeyDown(self, keyEvent):
+        previously_handled = keyEvent.keyCode in self.keys_handled
+        self.keys_handled.add(keyEvent.keyCode)
         if keyEvent.charCode in range(ord('0'), ord('9') + 1) and self.get_chewing_cand_totalPage() > 0: # selection keys
             pass
         elif keyEvent.keyCode == VK_BACK:
@@ -264,15 +272,23 @@ class BrailleChewingTextService(ChewingTextService):
                     self.dots_cumulative_state |= 1 << i
                     self.dots_pressed_state |= 1 << i
             return True
+        if not previously_handled:
+            self.keys_handled.remove(keyEvent.keyCode)
+        self.keys_forwarded.add(keyEvent.keyCode)
         return super().onKeyDown(keyEvent)
 
     def filterKeyUp(self, keyEvent):
-        if self.needs_braille_handling(keyEvent):
+        # 這個按鍵曾經進入 onKeyDown, 現在也讓它進入 onKeyUp
+        if keyEvent.keyCode in self.keys_handled or keyEvent.keyCode in self.keys_forwarded:
             return True
-        return super().filterKeyUp(keyEvent)
+        want_to_handle = super().filterKeyUp(keyEvent)
+        # 上層類別選擇還是要處理，所以把這按鍵標記為「被轉送」
+        if want_to_handle:
+            self.keys_forwarded.add(keyEvent.keyCode)
+        return want_to_handle
 
     def onKeyUp(self, keyEvent):
-        if self.needs_braille_handling(keyEvent):
+        if keyEvent.keyCode in self.keys_handled:
             # 發現點字鍵被釋放，更新追蹤狀態
             if keyEvent.isPrintableChar():
                 i = self.braille_keys.find(chr(keyEvent.charCode).upper())
@@ -282,8 +298,11 @@ class BrailleChewingTextService(ChewingTextService):
             # 如果在點字組字期間按下 Delete 或方向鍵等也會執行到此
             if not self.dots_pressed_state and keyEvent.keyCode != VK_BACK:
                 self.handle_braille_keys(keyEvent)
-            return True
-        return super().onKeyUp(keyEvent)
+            self.keys_handled.remove(keyEvent.keyCode)
+        if keyEvent.keyCode in self.keys_forwarded:
+            self.keys_forwarded.remove(keyEvent.keyCode)
+            return super().onKeyUp(keyEvent)
+        return True
 
     # 模擬實體鍵盤的英數按鍵送到新酷音
     def send_keys_to_chewing(self, keys, keyEvent):
@@ -303,6 +322,7 @@ class BrailleChewingTextService(ChewingTextService):
             self.setCompositionCursor(self.chewingContext.cursor_Current())
             return
         # 其餘的按鍵，使用模擬的方式，會跟 GUI 顯示同步
+        keyCode_backup = keyEvent.keyCode
         for key in keys:
             keyEvent.keyCode = ord(key.upper())  # 英文數字的 virtual keyCode 正好 = 大寫 ASCII code
             keyEvent.charCode = ord(key)  # charCode 為字元內碼
@@ -311,6 +331,7 @@ class BrailleChewingTextService(ChewingTextService):
             super().onKeyDown(keyEvent)
             super().filterKeyUp(keyEvent)
             super().onKeyUp(keyEvent)
+        keyEvent.keyCode = keyCode_backup
 
     def get_chewing_cand_totalPage(self):
         # access the chewingContext created by ChewingTextService
