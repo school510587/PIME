@@ -185,6 +185,8 @@ class BrailleChewingTextService(ChewingTextService):
         super().__init__(client)
         self.dots_cumulative_state = 0
         self.dots_pressed_state = 0
+        self.keys_handled = set()
+        self.keys_notified = set()
         self.bpmf_cumulative_str = ""
         self.state = brl_buf_state()
         self.state_representation = 0
@@ -206,6 +208,8 @@ class BrailleChewingTextService(ChewingTextService):
     def onDeactivate(self):
         super().onDeactivate()
         # 丟棄輸入法狀態
+        self.keys_handled.clear()
+        self.keys_notified.clear()
         self.reset_braille_mode()
 
     # 當中文編輯結束時會被呼叫。若中文編輯不是正常結束，而是因為使用者
@@ -215,6 +219,8 @@ class BrailleChewingTextService(ChewingTextService):
         super().onCompositionTerminated(forced)
         if forced:
             # 中文組字到一半被系統強制關閉，清除編輯區內容
+            self.keys_handled.clear()
+            self.keys_notified.clear()
             self.reset_braille_mode()
 
     def reset_braille_mode(self, clear_pending=True):
@@ -250,9 +256,13 @@ class BrailleChewingTextService(ChewingTextService):
     def filterKeyDown(self, keyEvent):
         if self.needs_braille_handling(keyEvent):
             return True
+        self.keys_notified.add(keyEvent.keyCode)
         return super().filterKeyDown(keyEvent)
 
     def onKeyDown(self, keyEvent):
+        # 記下「之前是否處理過」的狀態，確保 keys_handled 記錄的是至少處理過一次的 keys
+        previously_handled = keyEvent.keyCode in self.keys_handled
+        self.keys_handled.add(keyEvent.keyCode)
         if keyEvent.charCode in range(ord('0'), ord('9') + 1) and self.get_chewing_cand_totalPage() > 0: # selection keys
             pass
         elif keyEvent.keyCode == VK_BACK:
@@ -274,15 +284,22 @@ class BrailleChewingTextService(ChewingTextService):
                     self.dots_cumulative_state |= 1 << i
                     self.dots_pressed_state |= 1 << i
             return True
+        # 之前沒有處理過，這次也不打算處理
+        if not previously_handled:
+            self.keys_handled.remove(keyEvent.keyCode)
         return super().onKeyDown(keyEvent)
 
     def filterKeyUp(self, keyEvent):
-        if self.needs_braille_handling(keyEvent):
-            return True
-        return super().filterKeyUp(keyEvent)
+        # 記下上層類別的決定是否處理該 key, 讓 onKeyUp 收到並轉送自己不處理而上層要的 keys
+        want_to_handle = False
+        # 這個按鍵曾經進入上層類別的 filterKeyDown, 上層類別可能會預期它的 filterKeyUp 訊息
+        if keyEvent.keyCode in self.keys_notified:
+            self.keys_notified.remove(keyEvent.keyCode)
+            want_to_handle = super().filterKeyUp(keyEvent)
+        return want_to_handle or (keyEvent.keyCode in self.keys_handled)
 
     def onKeyUp(self, keyEvent):
-        if self.needs_braille_handling(keyEvent):
+        if keyEvent.keyCode in self.keys_handled:
             # 發現點字鍵被釋放，更新追蹤狀態
             if keyEvent.isPrintableChar():
                 i = self.braille_keys.find(chr(keyEvent.charCode).upper())
@@ -292,6 +309,7 @@ class BrailleChewingTextService(ChewingTextService):
             # 如果在點字組字期間按下 Delete 或方向鍵等也會執行到此
             if not self.dots_pressed_state and keyEvent.keyCode != VK_BACK:
                 self.handle_braille_keys(keyEvent)
+            self.keys_handled.remove(keyEvent.keyCode)
             return True
         return super().onKeyUp(keyEvent)
 
@@ -313,6 +331,7 @@ class BrailleChewingTextService(ChewingTextService):
             self.setCompositionCursor(self.chewingContext.cursor_Current())
             return
         # 其餘的按鍵，使用模擬的方式，會跟 GUI 顯示同步
+        keyCode_backup = keyEvent.keyCode
         for key in keys:
             keyEvent.keyCode = ord(key.upper())  # 英文數字的 virtual keyCode 正好 = 大寫 ASCII code
             keyEvent.charCode = ord(key)  # charCode 為字元內碼
@@ -321,6 +340,7 @@ class BrailleChewingTextService(ChewingTextService):
             super().onKeyDown(keyEvent)
             super().filterKeyUp(keyEvent)
             super().onKeyUp(keyEvent)
+        keyEvent.keyCode = keyCode_backup
 
     def get_chewing_cand_totalPage(self):
         # access the chewingContext created by ChewingTextService
