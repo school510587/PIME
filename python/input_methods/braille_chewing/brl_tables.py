@@ -16,6 +16,7 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
+from enum import Enum
 
 brl_ascii_dic = { # 包函英數模式下的字母、數字及鍵盤上的符號
     # 空白
@@ -338,6 +339,11 @@ SYMBOL_DICT = Braille_Bopomofo_Dict("SYMBOL", {
     "46-2456": "ω",
 }, tuple())
 
+class State_Representation(Enum):
+    BOPOMOFO_AS_POSSIBLE = 0
+    BRL_UNICODE = 1
+    NONE = 2
+
 # 點字緩衝區的狀態
 # Members:
 # _brl_buf: 記錄目前點字輸入的狀態
@@ -345,8 +351,8 @@ SYMBOL_DICT = Braille_Bopomofo_Dict("SYMBOL", {
 # _stack: 記錄每個點字輸入的類型
 class brl_buf_state:
 
-    def __init__(self, display_ucbrl=False):
-        self.display_ucbrl = display_ucbrl
+    def __init__(self, representation=State_Representation(0).name):
+        self.representation = State_Representation[representation.upper()]
         self.reset()
 
     # 取得下一個點字輸入，產生狀態變化與輸出回饋
@@ -439,7 +445,11 @@ class brl_buf_state:
         return bool(self._brl_buf)
 
     def display_str(self):
-        return self.ucbrl_str() if self.display_ucbrl or not self._stack[-1] else "".join(self._bop_buf)
+        if self.representation is State_Representation.NONE:
+            return ""
+        elif self.representation is State_Representation.BRL_UNICODE or not self._stack[-1]:
+            return self.ucbrl_str()
+        return "".join(self._bop_buf)
 
     def hint_msg(self):
         bpmf_hint = ""
@@ -458,8 +468,8 @@ class brl_buf_state:
         return "-".join(self._brl_buf) + bpmf_hint
 
     def next_state_representation(self):
-        self.display_ucbrl = not self.display_ucbrl
-        return self.display_ucbrl
+        self.representation = State_Representation((self.representation.value + 1) % len(State_Representation))
+        return self.representation.name
 
     def reset(self):
         self._brl_buf = []
