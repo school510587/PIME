@@ -345,8 +345,7 @@ SYMBOL_DICT = Braille_Bopomofo_Dict("SYMBOL", {
 # _stack: 記錄每個點字輸入的類型
 class brl_buf_state:
 
-    def __init__(self, display_ucbrl=False):
-        self.display_ucbrl = display_ucbrl
+    def __init__(self):
         self.reset()
 
     # 取得下一個點字輸入，產生狀態變化與輸出回饋
@@ -438,8 +437,8 @@ class brl_buf_state:
     def brl_check(self):
         return bool(self._brl_buf)
 
-    def display_str(self):
-        return self.ucbrl_str() if self.display_ucbrl or not self._stack[-1] else "".join(self._bop_buf)
+    def display_str(self, display_ucbrl):
+        return self.ucbrl_str() if display_ucbrl or not self._stack[-1] else "".join(self._bop_buf)
 
     def hint_msg(self):
         bpmf_hint = ""

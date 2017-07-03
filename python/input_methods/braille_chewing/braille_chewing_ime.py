@@ -174,12 +174,20 @@ class BrailleChewingTextService(ChewingTextService):
     current_dir = os.path.dirname(__file__)
     sounds_dir = os.path.join(current_dir, "sounds")
 
+    # 內部狀態的表達方式
+    state_representations = (
+        "BPMF_AP", # 盡量用注音表示內部狀態，除非接下來只可能打出符號
+        "BRL_UNC", # 組字區完全使用點字 (Braille Unicode) 表示未完成的字符
+        "NOTHING", # 不顯示內部狀態，組字區只在組完一個字符時改變內容
+    )
+
     def __init__(self, client):
         super().__init__(client)
         self.dots_cumulative_state = 0
         self.dots_pressed_state = 0
         self.bpmf_cumulative_str = ""
-        self.state = brl_buf_state(False)
+        self.state = brl_buf_state()
+        self.state_representation = 0
 
     def applyConfig(self):
         # 攔截 ChewingTextService 的 applyConfig，以便強制關閉某些設定選項
@@ -353,7 +361,7 @@ class BrailleChewingTextService(ChewingTextService):
             bopomofo_seq = ""
         elif current_braille == "0145":
             # 熱鍵 145+space 用來切換未組成字的狀態顯示方式
-            self.state.display_ucbrl = not self.state.display_ucbrl
+            self.state_representation = (self.state_representation + 1) % len(self.state_representations)
             bopomofo_seq = ""
         elif current_braille == "024567":
             # 熱鍵 24567+space 用來打開新酷音官方網站
@@ -457,7 +465,8 @@ class BrailleChewingTextService(ChewingTextService):
             if self.chewingContext.buffer_Check():
                 compStr = self.chewingContext.buffer_String().decode("UTF-8")
             pos = self.chewingContext.cursor_Current()
-            brl_buf_str = self.state.display_str()
+            display_method = self.state_representations[self.state_representation]
+            brl_buf_str = "" if display_method == "NOTHING" else self.state.display_str(display_method == "BRL_UNC")
             compStr = compStr[:pos] + brl_buf_str + compStr[pos:]
             self.setCompositionCursor(self.chewingContext.cursor_Current() + len(brl_buf_str))
             self.setCompositionString(compStr)
