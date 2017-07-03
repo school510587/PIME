@@ -458,6 +458,20 @@ class BrailleChewingTextService(ChewingTextService):
             snd_file = os.path.join(self.sounds_dir, "full.wav" if mode == FULLSHAPE_MODE else "half.wav")
             winsound.PlaySound(snd_file, winsound.SND_FILENAME|winsound.SND_ASYNC|winsound.SND_NODEFAULT)
 
+    # 強迫新酷音丟棄所有注音、選字狀態，直接 commit
+    def force_commit(self):
+        if not self.chewingContext:
+            return
+        if self.showCandidates:
+            self.setShowCandidates(False)
+            self.chewingContext.cand_close()
+        if self.chewingContext.buffer_Check():
+            self.chewingContext.commit_preedit_buf()
+            self.setCompositionCursor(0)
+            self.setCompositionString("")
+            if self.chewingContext.commit_Check():
+                self.setCommitString(self.chewingContext.commit_String().decode("UTF-8"))
+
     # 更新組字區顯示正在組字的狀態
     def update_composition_display(self):
         if self.chewingContext:
