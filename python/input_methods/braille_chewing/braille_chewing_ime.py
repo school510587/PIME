@@ -181,7 +181,7 @@ class BrailleChewingTextService(ChewingTextService):
         self.keys_forwarded = set()
         self.keys_handled = set()
         self.bpmf_cumulative_str = ""
-        self.state = brl_buf_state("BOPOMOFO_AS_POSSIBLE")
+        self.state = brl_buf_state("BPMF_AP")
 
     def applyConfig(self):
         # 攔截 ChewingTextService 的 applyConfig，以便強制關閉某些設定選項

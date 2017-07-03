@@ -16,7 +16,6 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-from enum import Enum
 
 brl_ascii_dic = { # 包函英數模式下的字母、數字及鍵盤上的符號
     # 空白
@@ -339,11 +338,6 @@ SYMBOL_DICT = Braille_Bopomofo_Dict("SYMBOL", {
     "46-2456": "ω",
 }, tuple())
 
-class State_Representation(Enum):
-    BOPOMOFO_AS_POSSIBLE = 0
-    BRL_UNICODE = 1
-    NONE = 2
-
 # 點字緩衝區的狀態
 # Members:
 # _brl_buf: 記錄目前點字輸入的狀態
@@ -351,8 +345,17 @@ class State_Representation(Enum):
 # _stack: 記錄每個點字輸入的類型
 class brl_buf_state:
 
-    def __init__(self, representation=State_Representation(0).name):
-        self.representation = State_Representation[representation.upper()]
+    STATE_REPRESENTATIONS = (
+        "BPMF_AP",
+        "BRL_UNC",
+        "NOTHING",
+    )
+
+    def __init__(self, representation=STATE_REPRESENTATIONS[0]):
+        try:
+            self.representation = self.STATE_REPRESENTATIONS.index(representation.upper())
+        except ValueError:
+            self.representation = 0
         self.reset()
 
     # 取得下一個點字輸入，產生狀態變化與輸出回饋
@@ -445,9 +448,10 @@ class brl_buf_state:
         return bool(self._brl_buf)
 
     def display_str(self):
-        if self.representation is State_Representation.NONE:
+        method = self.STATE_REPRESENTATIONS[self.representation]
+        if method == "NOTHING":
             return ""
-        elif self.representation is State_Representation.BRL_UNICODE or not self._stack[-1]:
+        elif method == "BRL_UNC" or not self._stack[-1]:
             return self.ucbrl_str()
         return "".join(self._bop_buf)
 
@@ -468,8 +472,8 @@ class brl_buf_state:
         return "-".join(self._brl_buf) + bpmf_hint
 
     def next_state_representation(self):
-        self.representation = State_Representation((self.representation.value + 1) % len(State_Representation))
-        return self.representation.name
+        self.representation = (self.representation + 1) % len(self.STATE_rEPRESENTATIONS)
+        return self.STATE_REPRESENTATIONS[self.representation]
 
     def reset(self):
         self._brl_buf = []
