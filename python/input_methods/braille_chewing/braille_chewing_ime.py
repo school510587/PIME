@@ -188,6 +188,7 @@ class BrailleChewingTextService(ChewingTextService):
         self.bpmf_cumulative_str = ""
         self.state = brl_buf_state()
         self.state_representation = 0
+        self.output_brl_unc = False
 
     def applyConfig(self):
         # 攔截 ChewingTextService 的 applyConfig，以便強制關閉某些設定選項
@@ -364,6 +365,13 @@ class BrailleChewingTextService(ChewingTextService):
             # 熱鍵 145+space 用來切換未組成字的狀態顯示方式
             self.state_representation = (self.state_representation + 1) % len(self.state_representations)
             bopomofo_seq = ""
+        elif current_braille == "0136":
+            # 熱鍵 136+space 用來切換英數模式時點字酷音該輸出英數字元或 Braille Unicode
+            # 如果英數模式下使用此熱鍵，必須清除留在組字區的內容
+            if self.langMode == ENGLISH_MODE and self.isComposing():
+                self.force_commit()
+            self.output_brl_unc = not self.output_brl_unc
+            bopomofo_seq = ""
         elif current_braille == "024567":
             # 熱鍵 24567+space 用來打開新酷音官方網站
             super().onCommand(ID_WEBSITE, COMMAND_LEFT_CLICK)
@@ -392,9 +400,12 @@ class BrailleChewingTextService(ChewingTextService):
             # 未定義的熱鍵，直接離開這個 if-else, 因為 bopomofo_seq 是 None 而發出警告聲（空白 "0" 不屬此類）
             pass
         elif self.langMode == ENGLISH_MODE:
-            bopomofo_seq = brl_ascii_dic.get(current_braille)
-            if bopomofo_seq and keyEvent.isKeyToggled(VK_CAPITAL):  # capslock
-                bopomofo_seq = bopomofo_seq.upper()  # convert to upper case
+            if self.output_brl_unc:
+                bopomofo_seq = chr(0x2800 | (self.dots_cumulative_state >> 1))
+            else:
+                bopomofo_seq = brl_ascii_dic.get(current_braille)
+                if bopomofo_seq and keyEvent.isKeyToggled(VK_CAPITAL):  # capslock
+                    bopomofo_seq = bopomofo_seq.upper()  # convert to upper case
         else:
             # 如果正在選字，允許使用點字數字
             if self.get_chewing_cand_totalPage():
@@ -416,21 +427,25 @@ class BrailleChewingTextService(ChewingTextService):
             winsound.MessageBeep()
         # bopomofo_seq 是一個非空字串，才轉送輸入給新酷音
         elif bopomofo_seq:
-            bopomofo_seq = "".join(self.bopomofo_to_keys.get(c, c) for c in bopomofo_seq)
-            # 將這次按下點字該送給新酷音的按鍵先暫存在 bpmf_cumulative_str
-            for c in bopomofo_seq:
-                if c == "\b":
-                    self.bpmf_cumulative_str = self.bpmf_cumulative_str[:-1]
-                else:
-                    self.bpmf_cumulative_str += c
-            # 遇到輸入符號，直接丟棄之前要打注音的鍵入序列
-            if bopomofo_seq.startswith("`"):
-                self.bpmf_cumulative_str = bopomofo_seq
-            # 內部點字累積狀態被重設，表示鍵入序列必須轉送給新酷音了
-            if not self.state.brl_check():
-                # 把注音送給新酷音
-                self.send_keys_to_chewing(self.bpmf_cumulative_str, keyEvent)
-                self.bpmf_cumulative_str = ""
+            # 輸入 Braille Unicode 模式，直接丟出點字字元
+            if self.output_brl_unc and self.langMode == ENGLISH_MODE:
+                self.setCommitString(bopomofo_seq)
+            else:
+                bopomofo_seq = "".join(self.bopomofo_to_keys.get(c, c) for c in bopomofo_seq)
+                # 將這次按下點字該送給新酷音的按鍵先暫存在 bpmf_cumulative_str
+                for c in bopomofo_seq:
+                    if c == "\b":
+                        self.bpmf_cumulative_str = self.bpmf_cumulative_str[:-1]
+                    else:
+                        self.bpmf_cumulative_str += c
+                # 遇到輸入符號，直接丟棄之前要打注音的鍵入序列
+                if bopomofo_seq.startswith("`"):
+                    self.bpmf_cumulative_str = bopomofo_seq
+                # 內部點字累積狀態被重設，表示鍵入序列必須轉送給新酷音了
+                if not self.state.brl_check():
+                    # 把注音送給新酷音
+                    self.send_keys_to_chewing(self.bpmf_cumulative_str, keyEvent)
+                    self.bpmf_cumulative_str = ""
 
         self.update_composition_display()
 
@@ -440,6 +455,11 @@ class BrailleChewingTextService(ChewingTextService):
 
     # 切換中英文模式
     def toggleLanguageMode(self):
+        # 當英數模式輸出 Braille Unicode 時，組字區非空會禁止切換模式
+        if self.output_brl_unc and self.isComposing():
+            print("Language toggling request is rejected.")
+            winsound.MessageBeep()
+            return
         super().toggleLanguageMode()
         if self.chewingContext:
             # 播放語音檔，說明目前是中文/英文
