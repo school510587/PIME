@@ -351,6 +351,7 @@ class BrailleChewingTextService(ChewingTextService):
             bopomofo_seq = ""
         elif current_braille == "0456":
             # 熱鍵 456+space 與 Shift 一樣能切換中打、英打模式
+            self.force_commit()
             self.toggleLanguageMode()
             bopomofo_seq = ""
         elif current_braille == "01":
