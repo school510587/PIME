@@ -244,7 +244,8 @@ class BrailleChewingTextService(ChewingTextService):
             self.reset_braille_mode(False)
         # 未按下修飾鍵，且點字正在組字，仍然當點字鍵處理
         # 許多不可打印按鍵如 Delete 及方向鍵，會於處理點字時忽略，不讓它有異常行為
-        return not has_modifiers and self.state.brl_check()
+        # 但是，修飾鍵本身應排除，而讓新酷音處理
+        return not has_modifiers and self.state.brl_check() and keyEvent.keyCode not in (VK_SHIFT, VK_CONTROL, VK_MENU)
 
     def filterKeyDown(self, keyEvent):
         if self.needs_braille_handling(keyEvent):
