@@ -254,6 +254,7 @@ class BrailleChewingTextService(ChewingTextService):
         return not has_modifiers and self.state.brl_check() and keyEvent.keyCode not in (VK_SHIFT, VK_CONTROL, VK_MENU)
 
     def filterKeyDown(self, keyEvent):
+        self.hideMessage() # 收到任何鍵入都隱藏之前顯示的任何提示訊息
         if self.needs_braille_handling(keyEvent):
             return True
         self.keys_notified.add(keyEvent.keyCode)
