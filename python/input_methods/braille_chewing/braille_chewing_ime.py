@@ -23,7 +23,14 @@ from keycodes import * # for VK_XXX constants
 from textService import *
 from ..chewing.chewing_ime import *
 from .brl_tables import brl_ascii_dic, brl_buf_state
+from . import nvdacc
 
+# 如果用戶正在執行 NVDA, 就要求其點字、語音呈現所指定之訊息
+def NVDA_message(text):
+    if nvdacc.testIfRunning() == 0:
+        nvdacc.cancelSpeech()
+        nvdacc.brailleMessage(text)
+        nvdacc.speakText(text)
 
 class BrailleChewingTextService(ChewingTextService):
 
@@ -176,9 +183,9 @@ class BrailleChewingTextService(ChewingTextService):
 
     # 內部狀態的表達方式
     state_representations = (
-        "BPMF_AP", # 盡量用注音表示內部狀態，除非接下來只可能打出符號
-        "BRL_UNC", # 組字區完全使用點字 (Braille Unicode) 表示未完成的字符
-        "NOTHING", # 不顯示內部狀態，組字區只在組完一個字符時改變內容
+        ("BPMF_AP", "組字狀態顯示注音"), # 盡量用注音表示內部狀態，除非接下來只可能打出符號
+        ("BRL_UNC", "組字狀態顯示點字"), # 組字區完全使用點字 (Braille Unicode) 表示未完成的字符
+        ("NOTHING", "不顯示組字狀態"), # 不顯示內部狀態，組字區只在組完一個字符時改變內容
     )
 
     def __init__(self, client):
@@ -383,17 +390,20 @@ class BrailleChewingTextService(ChewingTextService):
             message = self.state.hint_msg()
             if message:
                 self.showMessage(message, 8)
+                NVDA_message(message)
             bopomofo_seq = ""
         elif current_braille == "0145":
             # 熱鍵 145+space 用來切換未組成字的狀態顯示方式
             self.state_representation = (self.state_representation + 1) % len(self.state_representations)
             bopomofo_seq = ""
+            NVDA_message(self.state_representations[self.state_representation][1])
         elif current_braille == "0136":
             # 熱鍵 136+space 用來切換英數模式時點字酷音該輸出英數字元或 Braille Unicode
             # 如果英數模式下使用此熱鍵，必須清除留在組字區的內容
             if self.langMode == ENGLISH_MODE and self.isComposing():
                 self.force_commit()
             self.output_brl_unc = not self.output_brl_unc
+            NVDA_message(("設定" if self.output_brl_unc else "取消") + "，英數模式下輸出點字")
             bopomofo_seq = ""
         elif current_braille == "024567":
             # 熱鍵 24567+space 用來打開新酷音官方網站
@@ -418,6 +428,7 @@ class BrailleChewingTextService(ChewingTextService):
         elif current_braille == "02347":
             # 熱鍵 2347+space 用來點擊「輸出簡體中文」
             super().onCommand(ID_OUTPUT_SIMP_CHINESE, COMMAND_LEFT_CLICK)
+            NVDA_message(("設定" if self.outputSimpChinese else "取消") + "，釋放組字區內容時轉換為簡體中文")
             bopomofo_seq = ""
         elif current_braille.startswith("0") and len(current_braille) > 1:
             # 未定義的熱鍵，直接離開這個 if-else, 因為 bopomofo_seq 是 None 而發出警告聲（空白 "0" 不屬此類）
@@ -487,8 +498,7 @@ class BrailleChewingTextService(ChewingTextService):
         if self.chewingContext:
             # 播放語音檔，說明目前是中文/英文
             mode = self.chewingContext.get_ChiEngMode()
-            snd_file = os.path.join(self.sounds_dir, "chi.wav" if mode == CHINESE_MODE else "eng.wav")
-            winsound.PlaySound(snd_file, winsound.SND_FILENAME|winsound.SND_ASYNC|winsound.SND_NODEFAULT)
+            NVDA_message("中文輸入" if mode == CHINESE_MODE else "英數輸入")
             if mode == ENGLISH_MODE:
                 self.bpmf_cumulative_str = ""
                 self.state.reset()
@@ -499,8 +509,7 @@ class BrailleChewingTextService(ChewingTextService):
         if self.chewingContext:
             # 播放語音檔，說明目前是全形/半形
             mode = self.chewingContext.get_ShapeMode()
-            snd_file = os.path.join(self.sounds_dir, "full.wav" if mode == FULLSHAPE_MODE else "half.wav")
-            winsound.PlaySound(snd_file, winsound.SND_FILENAME|winsound.SND_ASYNC|winsound.SND_NODEFAULT)
+            NVDA_message("全形" if mode == FULLSHAPE_MODE else "半形")
 
     # 強迫新酷音丟棄所有注音、選字狀態，直接 commit
     def force_commit(self):
@@ -523,7 +532,7 @@ class BrailleChewingTextService(ChewingTextService):
             if self.chewingContext.buffer_Check():
                 compStr = self.chewingContext.buffer_String().decode("UTF-8")
             pos = self.chewingContext.cursor_Current()
-            display_method = self.state_representations[self.state_representation]
+            display_method = self.state_representations[self.state_representation][0]
             brl_buf_str = "" if display_method == "NOTHING" else self.state.display_str(display_method == "BRL_UNC")
             compStr = compStr[:pos] + brl_buf_str + compStr[pos:]
             self.setCompositionCursor(self.chewingContext.cursor_Current() + len(brl_buf_str))
