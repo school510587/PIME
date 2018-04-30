@@ -202,6 +202,40 @@ class BrailleChewingTextService(ChewingTextService):
     def applyConfig(self):
         # 攔截 ChewingTextService 的 applyConfig，以便強制關閉某些設定選項
         super().applyConfig()
+        import json, traceback
+        try:
+            config_json = open(os.path.join(self.current_dir, "config.json"), "r").read()
+            config = json.loads(config_json)
+        except:
+            traceback.print_exc()
+            return
+        try:
+            import string
+            k = config["braille-keys"].upper()
+            if len(k) != len(self.braille_keys) or not all(c in set(string.printable) - set("0123456789.") for c in k) or len(set(k)) != len(k):
+                raise ValueError("config.json: Invalid braille-keys value")
+            self.braille_keys = k
+        except:
+            traceback.print_exc()
+        try:
+            if (config["default-language"], self.langMode) in {("Chinese", ENGLISH_MODE), ("English", CHINESE_MODE)}:
+                super().toggleLanguageMode()
+            elif config["default-language"] not in ("Chinese", "English"):
+                raise ValueError("config.json: Invalid default-language value")
+        except:
+            traceback.print_exc()
+        try:
+            if (config["default-shape"], self.chewingContext.get_ShapeMode()) in {("Full", HALFSHAPE_MODE), ("Half", FULLSHAPE_MODE)}:
+                super().toggleShapeMode()
+            elif config["default-shape"] not in ("Full", "Half"):
+                raise ValueError("config.json: Invalid default-shape value")
+        except:
+            traceback.print_exc()
+        try:
+            self.state_representation = ("Bopomofo", "Braille", "").index(config["state-representation"])
+        except:
+            traceback.print_exc()
+            self.state_representation = 2
 
         # 強制使用預設 keyboard layout
         self.chewingContext.set_KBType(0);

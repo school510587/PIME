@@ -1,0 +1,7 @@
+{
+    "braille-keys": " FDSJKLA;",
+    "default-language": "Chinese",
+    "default-shape": "Half",
+    "state-representation": "Bopomofo",
+    "//": "This is a temporal configuration file for Braille Chewing."
+}
