@@ -264,7 +264,8 @@ class BrailleChewingTextService(ChewingTextService):
         # 記下「之前是否處理過」的狀態，確保 keys_handled 記錄的是至少處理過一次的 keys
         previously_handled = keyEvent.keyCode in self.keys_handled
         self.keys_handled.add(keyEvent.keyCode)
-        if keyEvent.charCode in range(ord('0'), ord('9') + 1) and self.get_chewing_cand_totalPage() > 0: # selection keys
+        if keyEvent.charCode in range(ord('0'), ord('9') + 1) and (self.get_chewing_cand_totalPage() > 0 or self.langMode == ENGLISH_MODE):
+            # 當選擇鍵用，或者英數模式下，數字鍵交給新酷音處理
             pass
         elif keyEvent.keyCode == VK_BACK:
             # 將倒退鍵經過內部狀態處理，取得鍵入序列轉送新酷音
